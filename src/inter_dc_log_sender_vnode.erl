@@ -28,7 +28,6 @@
 -include("inter_dc_repl.hrl").
 -include_lib("riak_core/include/riak_core_vnode.hrl").
 
-
 %% API
 -export([
      send/2,
@@ -123,17 +122,12 @@ handle_command({log_event, LogRecord}, _Sender, State) ->
       LogOp = LastLogRec#log_record.log_operation,
       TxId = LogOp#log_operation.tx_id,
       commit = LogOp#log_operation.op_type, %% sanity check
-%%      commit = CommitPld#log_record.op_type,
-%%      CommitPld = LastOp#operation.payload,
       CommitPld = LogOp#log_operation.log_payload,
       {DCID, CommitTime} = CommitPld#commit_log_payload.commit_time,
-%%      {{DCID, CommitTime}, SnapshotTime} = CommitPld#log_record.op_payload,
       SnapshotTime = CommitPld#commit_log_payload.snapshot_time,
-%%      TxId = CommitPld#log_record.tx_id,
       Partition = Txn#interdc_txn.partition,
       Data = {TxId, DCID, CommitTime, SnapshotTime, Partition},
       Phase = rpc:call(TestNode, commander, phase, []),
-      io:format("~n====== Phase: ~p ======~n", [Phase]),
       case Phase of
           record ->
               %%% TODO: merge following two lines into one

@@ -120,8 +120,6 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
   %% Therefore, we remove it prior to further checks.
   Dependencies = vectorclock:set_clock_of_dc(DCID, 0, Txn#interdc_txn.snapshot),
   CurrentClock = vectorclock:set_clock_of_dc(DCID, 0, get_partition_clock(State)),
-
-  TestNode = list_to_atom(os:getenv("TESTNODE")),
   %% Check if the current clock is greater than or equal to the dependency vector
   case vectorclock:ge(CurrentClock, Dependencies) of
 
@@ -144,6 +142,7 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
       %% ==================== Commander Instrumentation ====================
       %% Send the downstream event data to the commander
       %% ===================================================================
+      TestNode = list_to_atom(os:getenv("TESTNODE")),
       Phase = rpc:call(TestNode, commander, phase, []),
       case Phase of
           record ->
