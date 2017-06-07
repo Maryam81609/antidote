@@ -80,10 +80,31 @@ handle_call({del_dc, DCID}, _From, State) ->
 
 %% handle an incoming interDC transaction from a remote node.
 handle_info({zmq, _Socket, BinaryMsg, _Flags}, State) ->
-  %% decode the message
-  Msg = inter_dc_txn:from_bin(BinaryMsg),
-  %% deliver the message to an appropriate vnode
-  ok = inter_dc_sub_vnode:deliver_txn(Msg),
+  %% ==================== Commander Instrumentation ====================
+  %% Drop incoming interDC transactions from a remote node in replay phase
+  %% ===================================================================
+  TestNode = list_to_atom(os:getenv("TESTNODE", "false")),
+  case TestNode of
+      false ->
+          %% decode the message
+          Msg = inter_dc_txn:from_bin(BinaryMsg),
+          %% deliver the message to an appropriate vnode
+          ok = inter_dc_sub_vnode:deliver_txn(Msg);
+      _Else ->
+          Phase = rpc:call(TestNode, commander, phase, []),
+          case Phase of
+              replay ->
+                  noop;
+              Else -> %% record or init_test phase
+                  %% Execution will get stuck if the following line is removed
+                  Phase = Else,
+                  %% ==================== End of Instrumentation Region ====================
+                  %% decode the message
+                  Msg = inter_dc_txn:from_bin(BinaryMsg),
+                  %% deliver the message to an appropriate vnode
+                  ok = inter_dc_sub_vnode:deliver_txn(Msg)
+          end
+  end,
   {noreply, State}.
 
 handle_cast(_Request, State) -> {noreply, State}.

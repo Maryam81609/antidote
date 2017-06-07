@@ -134,7 +134,7 @@ handle_command({log_event, LogRecord}, _Sender, State) ->
               ok = rpc:call(TestNode, commander, update_upstream_event_data, [Data]),
               ok = rpc:call(TestNode, commander, update_transactions_data, [TxId, Txn]);
           replay ->
-              skip;
+              ok = rpc:call(TestNode, commander, update_replay_txns_data, [Data, Txn, TxId]);
           _ -> noop
       end,
       %% ==================== End of Instrumentation Region ====================

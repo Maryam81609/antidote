@@ -32,7 +32,8 @@
 %% API
 -export([
   handle_transaction/1,
-  set_dependency_clock/2]).
+  set_dependency_clock/2,
+  update_partition_clock/3]).
 
 %% VNode methods
 -export([
@@ -61,6 +62,13 @@
 }).
 
 %%%% API --------------------------------------------------------------------+
+
+%% Used by Commander:
+%% After delivering a remote transaction, this function is called by
+%% Commander to update the clock and make the recent update visible
+-spec(update_partition_clock(partition_id(), dcid(), non_neg_integer()) -> ok).
+update_partition_clock(Partition, DCID, Timestamp) ->
+    dc_utilities:call_vnode_sync(Partition, inter_dc_dep_vnode_master, {update_partition_clock, DCID, Timestamp}).
 
 %% Passes the received transaction to the dependency buffer.
 %% At this point no message can be lost (the transport layer must ensure all transactions are delivered reliably).
@@ -127,7 +135,20 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
     %% Still need to update the timestamp for that DC, up to 1 less than the
     %% value of the commit time, because updates from other DCs might depend
     %% on a time up to this
-    false -> {update_clock(State, DCID, Timestamp-1), false};
+    false ->
+        %% ==================== Commander Instrumentation ====================
+        %% Ensure dependency is satisfied in replay phase
+        %% ===================================================================
+        TestNode = list_to_atom(os:getenv("TESTNODE")),
+        Phase = rpc:call(TestNode, commander, phase, []),
+        case Phase of
+            replay ->
+                throw(io_lib:format("~nDependency is not satisfied.~nCurrentClock: ~p~nDependency: ~p~n",
+                    [dict:to_list(CurrentClock), dict:to_list(Dependencies)]));
+            _ -> skip
+        end,
+        %% ==================== End of Instrumentation Region ====================
+        {update_clock(State, DCID, Timestamp-1), false};
 
     %% If so, store the transaction
     true ->
@@ -149,12 +170,19 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
               ok = rpc:call(TestNode, commander, get_downstream_event_data,
                       [{dc_utilities:get_my_dc_id(), node(), Txn}]);
           replay ->
-              skip
+              LastLogRec = lists:last(Ops),
+              LogOp = LastLogRec#log_record.log_operation,
+              commit = LogOp#log_operation.op_type, %% sanity check
+              TxId = LogOp#log_operation.tx_id,
+              rpc:call(TestNode, commander, acknowledge_delivery, [TxId, Timestamp])
       end,
       %% ==================== End of Instrumentation Region ====================
-
-        {update_clock(State, DCID, Timestamp), true}
+      {update_clock(State, DCID, Timestamp), true}
   end.
+
+handle_command({update_partition_clock, DCID, Timestamp}, _Sender, State) ->
+    NewState = update_clock(State, DCID, Timestamp),
+    {reply, ok, NewState};
 
 handle_command({set_dependency_clock, Vector}, _Sender, State) ->
     {reply, ok, State#state{vectorclock = Vector}};
