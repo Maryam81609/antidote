@@ -95,6 +95,8 @@ handle_info({zmq, _Socket, BinaryMsg, _Flags}, State) ->
           case Phase of
               replay ->
                   noop;
+              {badrpc, Reason} ->
+                  throw(Reason);
               Else -> %% record or init_test phase
                   %% Execution will get stuck if the following line is removed
                   Phase = Else,

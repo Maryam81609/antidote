@@ -174,14 +174,20 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
               LogOp = LastLogRec#log_record.log_operation,
               commit = LogOp#log_operation.op_type, %% sanity check
               TxId = LogOp#log_operation.tx_id,
-              rpc:call(TestNode, commander, acknowledge_delivery, [TxId, Timestamp])
+              rpc:call(TestNode, commander, acknowledge_delivery, [TxId, Timestamp]);
+          _Else ->
+              skip
       end,
       %% ==================== End of Instrumentation Region ====================
       {update_clock(State, DCID, Timestamp), true}
   end.
 
 handle_command({update_partition_clock, DCID, Timestamp}, _Sender, State) ->
-    NewState = update_clock(State, DCID, Timestamp),
+    NewClock = vectorclock:set_clock_of_dc(DCID, Timestamp, State#state.vectorclock),
+    Now = dc_utilities:now_millisec(),
+    ok = meta_data_sender:put_meta_dict(stable, State#state.partition, NewClock),
+    NewLastUpdated = Now,
+    NewState = State#state{vectorclock = NewClock, last_updated = NewLastUpdated},
     {reply, ok, NewState};
 
 handle_command({set_dependency_clock, Vector}, _Sender, State) ->
