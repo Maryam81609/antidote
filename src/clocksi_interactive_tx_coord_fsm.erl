@@ -588,7 +588,7 @@ prepare(SD0 = #tx_coord_state{
 %%    lager:info("prepare::Before Set txn partial num: ~p!", [PartsCount]),
     if
         PartsCount > 0 ->
-            ok = rpc:call(TestNode, commander, set_txn_partial_num, [{TxId, PartsCount}]),
+            ok = rpc:call(TestNode, commander, set_txn_partial_num, [{TxId, PartsCount}]);
 %%            lager:info("prepare::Set txn partial num!");
         PartsCount == 0 -> skip
     end,
