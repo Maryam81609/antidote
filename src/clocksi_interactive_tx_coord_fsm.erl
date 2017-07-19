@@ -579,6 +579,20 @@ prepare(SD0 = #tx_coord_state{
     transaction=Transaction,
     updated_partitions=Updated_partitions
 }) ->
+    %% ==================== Commander Instrumentation ====================
+    %% Ensure dependency is satisfied in replay phase
+    %% ===================================================================
+    TestNode = list_to_atom(os:getenv("TESTNODE")),
+    TxId = Transaction#transaction.txn_id,
+    PartsCount = length(Updated_partitions),
+%%    lager:info("prepare::Before Set txn partial num: ~p!", [PartsCount]),
+    if
+        PartsCount > 0 ->
+            ok = rpc:call(TestNode, commander, set_txn_partial_num, [{TxId, PartsCount}]),
+%%            lager:info("prepare::Set txn partial num!");
+        PartsCount == 0 -> skip
+    end,
+    %% ==================== End of Instrumentation Region ================
     case Updated_partitions of
         [] ->
             Snapshot_time = Transaction#transaction.snapshot_time,
@@ -598,6 +612,7 @@ prepare(SD0 = #tx_coord_state{
 
         [_] ->
             ok = ?CLOCKSI_VNODE:single_commit(Updated_partitions, Transaction),
+%%            lager:info("Single committing!"),
             {next_state, single_committing, SD0#tx_coord_state{state = committing, num_to_ack = 1}};
 
         [_|_] ->

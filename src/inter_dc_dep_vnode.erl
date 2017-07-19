@@ -165,16 +165,19 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
       %% ===================================================================
       TestNode = list_to_atom(os:getenv("TESTNODE")),
       Phase = rpc:call(TestNode, commander, phase, []),
+        MyDc = dc_utilities:get_my_dc_id(),
       case Phase of
           record ->
               ok = rpc:call(TestNode, commander, get_downstream_event_data,
-                      [{dc_utilities:get_my_dc_id(), node(), Txn}]);
+                      [{MyDc, node(), Txn}]);
+%%              lager:info("called commander:get_downstream_event_data");
           replay ->
               LastLogRec = lists:last(Ops),
               LogOp = LastLogRec#log_record.log_operation,
               commit = LogOp#log_operation.op_type, %% sanity check
               TxId = LogOp#log_operation.tx_id,
-              rpc:call(TestNode, commander, acknowledge_delivery, [TxId, Timestamp]);
+              rpc:call(TestNode, commander, acknowledge_delivery, [TxId, MyDc, Timestamp]);
+%%              lager:info("called commander:acknowledge_delivery. ~P, ~p", [TxId, Partition]);
           _Else ->
               skip
       end,
@@ -183,11 +186,13 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
   end.
 
 handle_command({update_partition_clock, DCID, Timestamp}, _Sender, State) ->
+%%    lager:info("inter_dc_dep_vnode_update partition clock!"),
     NewClock = vectorclock:set_clock_of_dc(DCID, Timestamp, State#state.vectorclock),
     Now = dc_utilities:now_millisec(),
     ok = meta_data_sender:put_meta_dict(stable, State#state.partition, NewClock),
     NewLastUpdated = Now,
     NewState = State#state{vectorclock = NewClock, last_updated = NewLastUpdated},
+%%    lager:info("inter_dc_dep_vnode_done with update partition clock!"),
     {reply, ok, NewState};
 
 handle_command({set_dependency_clock, Vector}, _Sender, State) ->

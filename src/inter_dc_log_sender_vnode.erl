@@ -117,6 +117,7 @@ handle_command({log_event, LogRecord}, _Sender, State) ->
       %% ==================== Commander Instrumentation ====================
       %%  Update upstream transactions data in commander, and have them recorded
       %% ===================================================================
+%%        lager:info("Inter_dc_log_sender_reached log event"),
       TestNode = list_to_atom(os:getenv("TESTNODE")),
       LastLogRec = lists:last(Ops),
       LogOp = LastLogRec#log_record.log_operation,
@@ -126,15 +127,15 @@ handle_command({log_event, LogRecord}, _Sender, State) ->
       {DCID, CommitTime} = CommitPld#commit_log_payload.commit_time,
       SnapshotTime = CommitPld#commit_log_payload.snapshot_time,
       Partition = Txn#interdc_txn.partition,
-      Data = {TxId, DCID, CommitTime, SnapshotTime, Partition},
+      Data = {TxId, Txn, DCID, CommitTime, SnapshotTime, Partition},
       Phase = rpc:call(TestNode, commander, phase, []),
       case Phase of
           record ->
-              %%% TODO: merge following two lines into one
-              ok = rpc:call(TestNode, commander, update_upstream_event_data, [Data]),
-              ok = rpc:call(TestNode, commander, update_transactions_data, [TxId, Txn]);
+              ok = rpc:call(TestNode, commander, update_upstream_event_data, [Data]);
+%%              lager:info("update_upstream_event_data::Set txn partial num!");
           replay ->
               ok = rpc:call(TestNode, commander, update_replay_txns_data, [Data, Txn, TxId]);
+%%                lager:info("commander update replay txns data!");
           _ -> noop
       end,
       %% ==================== End of Instrumentation Region ====================

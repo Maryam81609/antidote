@@ -91,6 +91,7 @@ handle_info({zmq, _Socket, BinaryMsg, _Flags}, State) ->
           %% deliver the message to an appropriate vnode
           ok = inter_dc_sub_vnode:deliver_txn(Msg);
       _Else ->
+          wait_until_proc_starts(TestNode, false),
           Phase = rpc:call(TestNode, commander, phase, []),
           case Phase of
               replay ->
@@ -158,3 +159,11 @@ connect_to_node([Address|Rest]) ->
         _ ->
             connect_to_node(Rest)
     end.
+
+wait_until_proc_starts(_, true) ->
+    noop;
+
+wait_until_proc_starts(TestNode, false) ->
+    ProcsOnTestNode = rpc:call(TestNode, erlang, registered, []),
+    CommanderExists = rpc:call(TestNode, lists, member, [commander, ProcsOnTestNode]),
+    wait_until_proc_starts(TestNode, CommanderExists).
